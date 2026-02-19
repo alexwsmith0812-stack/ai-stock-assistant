@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Stock Insights Assistant</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0b1120;
+        --bg-card: #020617;
+        --border: #1e293b;
+        --accent: #38bdf8;
+        --accent-soft: rgba(56, 189, 248, 0.1);
+        --text: #e5e7eb;
+        --text-muted: #9ca3af;
+        --error: #f97373;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+          sans-serif;
+        background: radial-gradient(circle at top, #1d283a 0, #020617 50%, #000 100%);
+        color: var(--text);
+        display: flex;
+        align-items: stretch;
+        justify-content: center;
+        padding: 24px;
+        box-sizing: border-box;
+      }
+
+      .app {
+        width: 100%;
+        max-width: 960px;
+        background: linear-gradient(145deg, rgba(15, 23, 42, 0.96), #020617);
+        border-radius: 18px;
+        border: 1px solid #1f2937;
+        box-shadow: 0 24px 80px rgba(15, 23, 42, 0.8);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .header {
+        padding: 16px 20px 10px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .title {
+        font-size: 18px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .pill {
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        border: 1px solid var(--accent-soft);
+        background: rgba(15, 23, 42, 0.85);
+        color: var(--accent);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .subtitle {
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+
+      .messages {
+        flex: 1;
+        padding: 16px 20px 8px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .message-row {
+        display: flex;
+      }
+
+      .message-row.user {
+        justify-content: flex-end;
+      }
+
+      .message-row.assistant {
+        justify-content: flex-start;
+      }
+
+      .bubble {
+        max-width: 80%;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        font-size: 14px;
+        line-height: 1.4;
+        white-space: pre-wrap;
+      }
+
+      .bubble.user {
+        background: linear-gradient(135deg, #0ea5e9, #22d3ee);
+        color: #0b1120;
+        border-color: transparent;
+      }
+
+      .bubble.assistant {
+        background: rgba(15, 23, 42, 0.9);
+      }
+
+      .bubble.error {
+        border-color: rgba(248, 113, 113, 0.4);
+        color: var(--error);
+      }
+
+      .input-row {
+        padding: 12px 16px 14px;
+        border-top: 1px solid var(--border);
+        background: radial-gradient(circle at top left, #0b1120, #020617 45%);
+      }
+
+      form {
+        display: flex;
+        gap: 8px;
+        align-items: stretch;
+      }
+
+      textarea {
+        flex: 1;
+        resize: none;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: rgba(15, 23, 42, 0.9);
+        color: var(--text);
+        padding: 10px 12px;
+        font-size: 14px;
+        line-height: 1.3;
+        max-height: 96px;
+        min-height: 44px;
+      }
+
+      textarea:focus-visible {
+        outline: 1px solid var(--accent);
+        outline-offset: 1px;
+        border-color: var(--accent);
+      }
+
+      button {
+        border-radius: 999px;
+        border: none;
+        padding: 0 18px;
+        background: linear-gradient(135deg, #0ea5e9, #22c55e);
+        color: #020617;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        white-space: nowrap;
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+
+      .status {
+        margin-top: 6px;
+        font-size: 11px;
+        color: var(--text-muted);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--accent);
+        box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.2);
+        display: none;
+      }
+
+      .dot.visible {
+        display: inline-block;
+      }
+
+      @media (max-width: 640px) {
+        body {
+          padding: 8px;
+        }
+
+        .app {
+          border-radius: 14px;
+        }
+
+        .bubble {
+          max-width: 90%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="header">
+        <div>
+          <div class="title">
+            <span>Stock Insights Assistant</span>
+            <span class="pill">AI • Realtime data</span>
+          </div>
+          <div class="subtitle">
+            Ask about tickers, comparisons, company info, or recent news.
+          </div>
+        </div>
+      </header>
+
+      <main class="messages" id="messages"></main>
+
+      <div class="input-row">
+        <form id="chat-form">
+          <textarea
+            id="question"
+            placeholder="e.g. Compare AAPL and MSFT, or show recent news for TSLA"
+          ></textarea>
+          <button type="submit" id="send-btn">
+            <span id="send-label">Send</span>
+          </button>
+        </form>
+        <div class="status">
+          <span class="dot" id="loading-dot"></span>
+          <span id="status-text">Connected locally</span>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const form = document.getElementById("chat-form");
+      const textarea = document.getElementById("question");
+      const messagesEl = document.getElementById("messages");
+      const sendBtn = document.getElementById("send-btn");
+      const sendLabel = document.getElementById("send-label");
+      const loadingDot = document.getElementById("loading-dot");
+      const statusText = document.getElementById("status-text");
+
+      function appendMessage(sender, text, isError = false) {
+        const row = document.createElement("div");
+        row.className = `message-row ${sender}`;
+
+        const bubble = document.createElement("div");
+        bubble.className = `bubble ${sender}` + (isError ? " error" : "");
+        bubble.textContent = text;
+
+        row.appendChild(bubble);
+        messagesEl.appendChild(row);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+
+      function setLoading(isLoading) {
+        if (isLoading) {
+          sendBtn.disabled = true;
+          sendLabel.textContent = "Thinking…";
+          loadingDot.classList.add("visible");
+          statusText.textContent = "Asking the Stock Insights Assistant…";
+        } else {
+          sendBtn.disabled = false;
+          sendLabel.textContent = "Send";
+          loadingDot.classList.remove("visible");
+          statusText.textContent = "Ready for your next question.";
+        }
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const question = textarea.value.trim();
+        if (!question) return;
+
+        appendMessage("user", question);
+        textarea.value = "";
+        setLoading(true);
+
+        try {
+          const response = await fetch("/ask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ question }),
+          });
+
+          const data = await response.json().catch(() => null);
+
+          if (!response.ok) {
+            const detail =
+              (data && (data.detail || data.error)) ||
+              "Something went wrong while answering your question.";
+            appendMessage("assistant", detail, true);
+          } else {
+            appendMessage("assistant", data.answer || "No answer returned.");
+          }
+        } catch (error) {
+          appendMessage(
+            "assistant",
+            "Network error: please check your connection and try again.",
+            true
+          );
+        } finally {
+          setLoading(false);
+          textarea.focus();
+        }
+      });
+
+      // Submit form on Enter, but allow Shift+Enter for new lines
+      textarea.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          form.dispatchEvent(new Event("submit"));
+        }
+      });
+    </script>
+  </body>
+  </html>
+

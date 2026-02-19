@@ -1,0 +1,23 @@
+# Environment variables - never commit real keys
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.cursor/
+.vscode/
+
+# Docker
+*.log
