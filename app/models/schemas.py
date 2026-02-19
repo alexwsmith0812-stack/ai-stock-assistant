@@ -5,10 +5,6 @@ class AskRequest(BaseModel):
     question: str = Field(..., description="Natural language question about stocks or markets.")
 
 
-class AskResponse(BaseModel):
-    answer: str = Field(..., description="AI-generated response to the user's question.")
-
-
 class StockQuote(BaseModel):
     ticker: str
     current_price: float | None = None

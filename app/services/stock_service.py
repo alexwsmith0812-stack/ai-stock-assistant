@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, timedelta
 from typing import Protocol
 
 from app.models.schemas import CompanyProfile, CompareStocksResult, MarketNewsItem, StockQuote
@@ -73,9 +74,7 @@ def compare_stocks(client: FinnhubClientProtocol, tickers: list[str]) -> Compare
 
 
 def get_market_news(client: FinnhubClientProtocol, ticker: str) -> list[MarketNewsItem]:
-    """Return recent headlines for a stock ticker."""
-    from datetime import date, timedelta
-
+    """Return recent headlines for a stock ticker (capped at 5 most recent)."""
     try:
         today = date.today()
         week_ago = today - timedelta(days=7)
@@ -94,7 +93,7 @@ def get_market_news(client: FinnhubClientProtocol, ticker: str) -> list[MarketNe
             ]
 
         news: list[MarketNewsItem] = []
-        for item in raw_items:
+        for item in raw_items[:5]:
             news.append(
                 MarketNewsItem(
                     ticker=ticker,
