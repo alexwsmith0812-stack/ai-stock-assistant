@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import finnhub
 from openai import OpenAI
@@ -20,7 +20,7 @@ def _get_finnhub_client() -> finnhub.Client:
     return finnhub.Client(api_key=settings.finnhub_api_key)
 
 
-def _tool_definitions() -> List[Dict[str, Any]]:
+def _tool_definitions() -> list[dict[str, Any]]:
     return [
         {
             "type": "function",
@@ -96,8 +96,8 @@ def _tool_definitions() -> List[Dict[str, Any]]:
 
 async def get_ai_response(
     question: str,
-    openai_client: Optional[OpenAI] = None,
-    finnhub_client: Optional[finnhub.Client] = None,
+    openai_client: OpenAI | None = None,
+    finnhub_client: finnhub.Client | None = None,
 ) -> str:
     """
     Send the user's question to OpenAI with tool definitions, handle tool calls,
@@ -107,7 +107,7 @@ async def get_ai_response(
     fh_client = finnhub_client or _get_finnhub_client()
     settings = get_settings()
 
-    messages: List[Dict[str, Any]] = [
+    messages: list[dict[str, Any]] = [
         {
             "role": "system",
             "content": (
@@ -204,9 +204,9 @@ async def get_ai_response(
 
 def _execute_tool(
     name: str,
-    arguments: Dict[str, Any],
+    arguments: dict[str, Any],
     fh_client: finnhub.Client,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Route tool calls to the appropriate stock_service function and normalise
     the response for the language model.

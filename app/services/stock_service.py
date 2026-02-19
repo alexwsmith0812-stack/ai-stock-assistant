@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Protocol
+from typing import Protocol
 
 from app.models.schemas import CompanyProfile, CompareStocksResult, MarketNewsItem, StockQuote
 
@@ -60,10 +60,10 @@ def get_company_profile(client: FinnhubClientProtocol, ticker: str) -> CompanyPr
         return CompanyProfile(ticker=ticker, error=f"Failed to fetch company profile: {exc}")
 
 
-def compare_stocks(client: FinnhubClientProtocol, tickers: List[str]) -> CompareStocksResult:
+def compare_stocks(client: FinnhubClientProtocol, tickers: list[str]) -> CompareStocksResult:
     """Compare multiple stocks by fetching both quotes and profiles."""
-    quotes: List[StockQuote] = []
-    profiles: List[CompanyProfile] = []
+    quotes: list[StockQuote] = []
+    profiles: list[CompanyProfile] = []
 
     for ticker in tickers:
         quotes.append(get_stock_quote(client, ticker))
@@ -72,7 +72,7 @@ def compare_stocks(client: FinnhubClientProtocol, tickers: List[str]) -> Compare
     return CompareStocksResult(tickers=tickers, quotes=quotes, profiles=profiles)
 
 
-def get_market_news(client: FinnhubClientProtocol, ticker: str) -> List[MarketNewsItem]:
+def get_market_news(client: FinnhubClientProtocol, ticker: str) -> list[MarketNewsItem]:
     """Return recent headlines for a stock ticker."""
     from datetime import date, timedelta
 
@@ -93,7 +93,7 @@ def get_market_news(client: FinnhubClientProtocol, ticker: str) -> List[MarketNe
                 )
             ]
 
-        news: List[MarketNewsItem] = []
+        news: list[MarketNewsItem] = []
         for item in raw_items:
             news.append(
                 MarketNewsItem(

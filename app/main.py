@@ -5,7 +5,6 @@ from fastapi.staticfiles import StaticFiles
 from app.api.routes import router as api_router
 from app.core.config import get_settings
 
-
 app = FastAPI(title="Stock Insights Assistant")
 
 app.add_middleware(
@@ -34,4 +33,3 @@ def _validate_env_on_startup() -> None:
 @app.get("/health")
 async def health_check() -> dict:
     return {"status": "ok"}
-

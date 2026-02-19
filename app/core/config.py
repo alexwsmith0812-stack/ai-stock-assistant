@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     openai_model: str = Field("gpt-4o-mini", validation_alias="OPENAI_MODEL")
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     try:
         return Settings()
