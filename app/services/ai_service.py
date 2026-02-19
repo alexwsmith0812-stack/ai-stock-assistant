@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncGenerator
 from typing import Any
 
 import finnhub
-from openai import OpenAI
+from openai import AsyncOpenAI, OpenAI
 
 from app.core.config import get_settings
 from app.services import stock_service
@@ -98,10 +99,10 @@ async def get_ai_response(
     question: str,
     openai_client: OpenAI | None = None,
     finnhub_client: finnhub.Client | None = None,
-) -> str:
+) -> AsyncGenerator[str, None]:
     """
     Send the user's question to OpenAI with tool definitions, handle tool calls,
-    and return a final natural language answer.
+    then stream the final natural language answer token by token.
     """
     client = openai_client or _get_openai_client()
     fh_client = finnhub_client or _get_finnhub_client()
@@ -125,7 +126,7 @@ async def get_ai_response(
 
     tools = _tool_definitions()
 
-    # Simple loop to support one or more rounds of tool usage, with a hard cap.
+    # Tool-calling phase: non-streaming until we have a final answer.
     for _ in range(3):
         try:
             response = client.chat.completions.create(
@@ -135,22 +136,24 @@ async def get_ai_response(
                 tool_choice="auto",
             )
         except Exception:
-            # Avoid throwing a 500 for common upstream issues (bad key, network, etc.).
-            return (
+            yield (
                 "I couldn't reach the AI service right now. "
                 "Please double-check your `OPENAI_API_KEY` and try again in a moment."
             )
+            return
 
         choice = response.choices[0]
         message = choice.message
 
-        # If the model produced a final answer, return it.
+        # If the model produced a final answer, stream it.
         if not message.tool_calls:
             content = message.content or "I was unable to generate a response."
-            return content
+            # Stream the final response with a single streaming API call.
+            async for chunk in _stream_completion(client, settings.openai_model, messages, content):
+                yield chunk
+            return
 
-        # IMPORTANT: for tool calling, the assistant message that contains `tool_calls`
-        # must be added to the conversation BEFORE any subsequent tool responses.
+        # Add assistant message with tool_calls, then tool results.
         messages.append(
             {
                 "role": "assistant",
@@ -169,13 +172,11 @@ async def get_ai_response(
             }
         )
 
-        # Otherwise, execute requested tool calls.
         for tool_call in message.tool_calls:
             tool_name = tool_call.function.name
             try:
                 arguments = json.loads(tool_call.function.arguments or "{}")
             except json.JSONDecodeError:
-                # If arguments are malformed, let the model know and continue.
                 messages.append(
                     {
                         "role": "tool",
@@ -188,7 +189,6 @@ async def get_ai_response(
                 continue
 
             result = _execute_tool(tool_name, arguments, fh_client)
-
             messages.append(
                 {
                     "role": "tool",
@@ -197,11 +197,44 @@ async def get_ai_response(
                 }
             )
 
-    # If we exhaust the loop without a natural language answer, respond gracefully.
-    return (
+    # Exhausted loop: yield a single error message.
+    yield (
         "I had trouble answering this question using the available stock data. "
         "Please try rephrasing or asking about a specific ticker."
     )
+
+
+async def _stream_completion(
+    client: OpenAI,
+    model: str,
+    messages: list[dict[str, Any]],
+    fallback_content: str,
+) -> AsyncGenerator[str, None]:
+    """
+    Make a streaming completion call (no tools) and yield content deltas.
+    Uses AsyncOpenAI so iteration does not block the event loop.
+    Falls back to yielding fallback_content if streaming fails or returns nothing.
+    """
+    settings = get_settings()
+    async_client = AsyncOpenAI(api_key=settings.openai_api_key)
+    try:
+        stream = await async_client.chat.completions.create(
+            model=model,
+            messages=messages,
+            stream=True,
+        )
+        had_content = False
+        async for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            if delta and getattr(delta, "content", None):
+                had_content = True
+                yield delta.content
+        if not had_content:
+            yield fallback_content
+    except Exception:
+        yield fallback_content
 
 
 def _execute_tool(

@@ -6,6 +6,11 @@ import pytest
 from app.services import ai_service
 
 
+async def _collect_stream(generator):
+    """Collect all chunks from an async generator into a single string."""
+    return "".join([chunk async for chunk in generator])
+
+
 @pytest.fixture
 def mock_openai_client():
     """Create a mock OpenAI client."""
@@ -20,7 +25,7 @@ def mock_finnhub_client():
 
 @pytest.mark.asyncio
 async def test_get_ai_response_direct_answer(mock_openai_client, mock_finnhub_client):
-    """Test when OpenAI returns a direct answer without tool calls."""
+    """Test when OpenAI returns a direct answer without tool calls (streaming mocked)."""
     mock_response = MagicMock()
     mock_response.choices = [
         MagicMock(
@@ -32,11 +37,17 @@ async def test_get_ai_response_direct_answer(mock_openai_client, mock_finnhub_cl
     ]
     mock_openai_client.chat.completions.create.return_value = mock_response
 
-    result = await ai_service.get_ai_response(
-        "What is the current price of AAPL?",
-        openai_client=mock_openai_client,
-        finnhub_client=mock_finnhub_client,
-    )
+    async def _fake_stream(_client, _model, _messages, fallback_content):
+        yield fallback_content
+
+    with patch("app.services.ai_service._stream_completion", side_effect=_fake_stream):
+        result = await _collect_stream(
+            ai_service.get_ai_response(
+                "What is the current price of AAPL?",
+                openai_client=mock_openai_client,
+                finnhub_client=mock_finnhub_client,
+            )
+        )
 
     assert "AAPL" in result or "Apple" in result or "150" in result
     mock_openai_client.chat.completions.create.assert_called_once()
@@ -65,8 +76,13 @@ async def test_get_ai_response_with_tool_call(mock_openai_client, mock_finnhub_c
         MagicMock(choices=[MagicMock(message=mock_message_final)]),
     ]
 
-    # Mock the stock service to return quote data
-    with patch("app.services.ai_service.stock_service.get_stock_quote") as mock_get_quote:
+    # Mock the stock service and streaming
+    async def _fake_stream(_client, _model, _messages, fallback_content):
+        yield fallback_content
+
+    with patch("app.services.ai_service.stock_service.get_stock_quote") as mock_get_quote, patch(
+        "app.services.ai_service._stream_completion", side_effect=_fake_stream
+    ):
         mock_get_quote.return_value = MagicMock(
             ticker="AAPL",
             current_price=150.25,
@@ -82,10 +98,12 @@ async def test_get_ai_response_with_tool_call(mock_openai_client, mock_finnhub_c
             },
         )
 
-        result = await ai_service.get_ai_response(
-            "What is the price of AAPL?",
-            openai_client=mock_openai_client,
-            finnhub_client=mock_finnhub_client,
+        result = await _collect_stream(
+            ai_service.get_ai_response(
+                "What is the price of AAPL?",
+                openai_client=mock_openai_client,
+                finnhub_client=mock_finnhub_client,
+            )
         )
 
         assert "AAPL" in result or "150" in result
@@ -114,7 +132,12 @@ async def test_get_ai_response_compare_stocks_tool(mock_openai_client, mock_finn
         MagicMock(choices=[MagicMock(message=mock_message_final)]),
     ]
 
-    with patch("app.services.ai_service.stock_service.compare_stocks") as mock_compare:
+    async def _fake_stream(_client, _model, _messages, fallback_content):
+        yield fallback_content
+
+    with patch("app.services.ai_service.stock_service.compare_stocks") as mock_compare, patch(
+        "app.services.ai_service._stream_completion", side_effect=_fake_stream
+    ):
         mock_compare.return_value = MagicMock(
             tickers=["AAPL", "MSFT"],
             quotes=[],
@@ -122,10 +145,12 @@ async def test_get_ai_response_compare_stocks_tool(mock_openai_client, mock_finn
             model_dump=lambda: {"tickers": ["AAPL", "MSFT"], "quotes": [], "profiles": []},
         )
 
-        result = await ai_service.get_ai_response(
-            "Compare AAPL and MSFT",
-            openai_client=mock_openai_client,
-            finnhub_client=mock_finnhub_client,
+        result = await _collect_stream(
+            ai_service.get_ai_response(
+                "Compare AAPL and MSFT",
+                openai_client=mock_openai_client,
+                finnhub_client=mock_finnhub_client,
+            )
         )
 
         assert "AAPL" in result or "MSFT" in result or "comparison" in result.lower()
@@ -153,11 +178,17 @@ async def test_get_ai_response_invalid_json_arguments(mock_openai_client, mock_f
         MagicMock(choices=[MagicMock(message=mock_message_final)]),
     ]
 
-    result = await ai_service.get_ai_response(
-        "Get AAPL quote",
-        openai_client=mock_openai_client,
-        finnhub_client=mock_finnhub_client,
-    )
+    async def _fake_stream(_client, _model, _messages, fallback_content):
+        yield fallback_content
+
+    with patch("app.services.ai_service._stream_completion", side_effect=_fake_stream):
+        result = await _collect_stream(
+            ai_service.get_ai_response(
+                "Get AAPL quote",
+                openai_client=mock_openai_client,
+                finnhub_client=mock_finnhub_client,
+            )
+        )
 
     # Should still return a response despite the JSON error
     assert result is not None
@@ -185,10 +216,12 @@ async def test_get_ai_response_max_iterations(mock_openai_client, mock_finnhub_c
             model_dump=lambda: {"ticker": "AAPL", "current_price": 150.25}
         )
 
-        result = await ai_service.get_ai_response(
-            "Get AAPL",
-            openai_client=mock_openai_client,
-            finnhub_client=mock_finnhub_client,
+        result = await _collect_stream(
+            ai_service.get_ai_response(
+                "Get AAPL",
+                openai_client=mock_openai_client,
+                finnhub_client=mock_finnhub_client,
+            )
         )
 
         # Should return a graceful error message after max iterations
@@ -218,10 +251,16 @@ async def test_get_ai_response_unknown_tool(mock_openai_client, mock_finnhub_cli
         MagicMock(choices=[MagicMock(message=mock_message_final)]),
     ]
 
-    result = await ai_service.get_ai_response(
-        "Do something",
-        openai_client=mock_openai_client,
-        finnhub_client=mock_finnhub_client,
-    )
+    async def _fake_stream(_client, _model, _messages, fallback_content):
+        yield fallback_content
+
+    with patch("app.services.ai_service._stream_completion", side_effect=_fake_stream):
+        result = await _collect_stream(
+            ai_service.get_ai_response(
+                "Do something",
+                openai_client=mock_openai_client,
+                finnhub_client=mock_finnhub_client,
+            )
+        )
 
     assert result is not None

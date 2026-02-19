@@ -8,4 +8,5 @@ services:
     volumes:
       - ./frontend:/app/frontend
       - ./app:/app/app
+      - ./tests:/app/tests
     restart: unless-stopped
