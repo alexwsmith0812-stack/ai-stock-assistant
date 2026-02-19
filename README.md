@@ -8,20 +8,75 @@ The application follows a clean, layered architecture with clear separation of c
 
 The design emphasizes dependency injection (clients are passed as parameters) to enable easy testing, graceful error handling at every layer, and a simple request-response flow without over-engineering. The stock service functions are pure and testable, while the AI service manages the tool-calling loop and conversation state. Configuration is centralized using Pydantic settings with environment variable validation, ensuring clear error messages if API keys are missing.
 
+```mermaid
+graph TD
+    A[Browser] -->|POST /ask| B[FastAPI Routes]
+    B --> C[AI Service]
+
+    subgraph Tool Calling Phase
+        C -->|Question + tool definitions| D[OpenAI]
+        D -->|Tool call request| C
+        C --> E[Stock Service]
+        E -->|API call| F[Finnhub]
+        F -->|Raw data| E
+        E -->|Structured result| C
+        C -->|Tool result| D
+    end
+
+    subgraph Streaming Phase
+        D -->|Final response stream| C
+        C -->|SSE chunks| B
+        B -->|SSE chunks| A
+    end
+```
+
 ## How to Run
 
 ### Prerequisites
 
-- Python 3.10 or higher
+- Python 3.10 or higher (for local deployment)
 - Docker and Docker Compose (for containerized deployment)
 - OpenAI API key
 - Finnhub API key (free tier available at [finnhub.io](https://finnhub.io))
+
+### Docker Deployment
+1. Clone the repository and navigate to the project directory:
+   ```bash
+   cd ai-stock-assistant
+   ```
+
+2. Create a `.env` file from the example:
+   ```bash
+   cp .env.example .env
+   ```
+
+3. Edit `.env` and add your API keys:
+   ```
+   OPENAI_API_KEY=your_openai_api_key_here
+   FINNHUB_API_KEY=your_finnhub_api_key_here
+   ```
+
+4. Build and run with Docker Compose:
+   ```bash
+   docker compose up --build
+   ```
+
+5. The application will be available at `http://localhost:8000`
+
+6. To run tests:
+   ```bash
+   docker compose run --rm web pytest
+   ```
+7. To run linting:
+   ```bash
+   docker compose run --rm web ruff check . --fix
+   ```
 
 ### Local Development
 
 1. Clone the repository and navigate to the project directory:
    ```bash
-   cd stock-insights
+   cd ai-stock-assistant
    ```
 
 2. Create a `.env` file from the example:
@@ -47,28 +102,14 @@ The design emphasizes dependency injection (clients are passed as parameters) to
 
 6. Open your browser to `http://localhost:8000`
 
-### Docker Deployment
-
-1. Create a `.env` file with your API keys (see above)
-
-2. Build and run with Docker Compose:
+7. To run tests
    ```bash
-   docker compose up --build
+   pytest
    ```
-
-3. The application will be available at `http://localhost:8000`
-
-### Running Tests
-
-```bash
-pytest
-```
-
-### Linting
-
-```bash
-ruff check .
-```
+8. To run linting
+   ```bash
+   ruff check .
+   ```
 
 ## Trade-offs and Decisions
 
@@ -80,38 +121,44 @@ ruff check .
 
 - **Error Handling Strategy**: All stock service functions return structured error responses (Pydantic models with error fields) rather than raising exceptions. This ensures the AI always receives a response it can work with, even when APIs fail.
 
-- **No Database**: The application is stateless—no conversation history is persisted. This keeps the architecture simple but means users can't reference previous questions. For production, you'd want to add session management and storage.
+- **No Database**: The application is stateless—no conversation history is persisted. This keeps the architecture simple and highly scalable but means users can't reference previous questions. For production, you'd want to add session management and storage.
+
+- **Scope Restriction via System Prompt**: Deliberately restricted the assistant to stock-related queries only through the system prompt, rather than building keyword filtering logic. This keeps the scope focused and leverages the LLM's natural language understanding to handle edge cases gracefully.
+
+- **Rate Limit Handling**: OpenAI rate limit errors are caught explicitly and returned as a user-friendly message rather than a generic server error. In production this would be complemented by request queuing or per-user rate limiting to prevent hitting limits in the first place.
 
 ## What I Would Improve with More Time
 
 1. **Conversation Memory**: Add session management and store conversation history so the AI can reference previous questions and maintain context across multiple interactions.
 
-2. **Rate Limiting**: Implement rate limiting per user/IP to prevent abuse and manage API costs, especially for OpenAI calls which can be expensive.
+2. **Caching**: Add caching for frequently requested stock data (e.g., quotes) to reduce API calls and improve response times. Redis would be a good fit here.
 
-3. **Caching**: Add caching for frequently requested stock data (e.g., quotes) to reduce API calls and improve response times. Redis would be a good fit here.
+3. **Input Validation**: Add more robust input validation and sanitization, especially for ticker symbols, to prevent injection or invalid API calls.
 
-4. **Better Error Messages**: Enhance error handling to provide more specific, actionable error messages to users when APIs fail or rate limits are hit.
+4. **Monitoring and Logging**: Add structured logging, metrics collection, and health check endpoints for production observability.
 
-5. **Streaming Responses**: Implement Server-Sent Events (SSE) to stream AI responses token-by-token for a better user experience, similar to ChatGPT.
+5. **Frontend Enhancements**: Improve the UI with markdown rendering for AI responses, syntax highlighting for stock data, and better mobile responsiveness.
 
-6. **Input Validation**: Add more robust input validation and sanitization, especially for ticker symbols, to prevent injection or invalid API calls.
+## AI Tooling Usage
 
-7. **Monitoring and Logging**: Add structured logging, metrics collection, and health check endpoints for production observability.
+This project was built using two AI tools in a deliberate workflow:
 
-8. **Frontend Enhancements**: Improve the UI with markdown rendering for AI responses, syntax highlighting for stock data, and better mobile responsiveness.
+**Claude (via claude.ai)** was used upfront for architecture planning and 
+decision making before writing any code. This included designing the overall 
+project structure, deciding on FastAPI over alternatives like Streamlit, 
+choosing OpenAI tool calling over a simpler prompt-based approach, mapping 
+out the request flow, and thinking through the testing strategy. Using a 
+conversational interface at this stage was valuable for exploring trade-offs 
+and arriving at a clear plan before touching code.
 
-## AI Tools Used
+**Cursor (with Claude)** was then used to scaffold and build the application 
+based on that plan. A detailed prompt capturing the architecture decisions, 
+folder structure, and technical requirements was used to generate the initial 
+scaffold. Cursor was then used iteratively to fix issues, resolve errors, and 
+refine the implementation - with each change reviewed and understood before 
+being accepted.
 
-This project was scaffolded and developed with assistance from **Claude Sonnet** (via Cursor). The AI helped with:
-
-- **Architecture Design**: Iterating on the overall structure, deciding on the layered service approach, and determining how to integrate OpenAI's function calling with the stock data API.
-
-- **Code Generation**: Generating boilerplate for FastAPI routes, Pydantic models, service functions, and test cases with proper mocking strategies.
-
-- **Error Handling Patterns**: Designing graceful error handling that works well with AI tool calling—ensuring errors are always returned as structured data rather than exceptions.
-
-- **Testing Strategy**: Creating comprehensive test suites that mock external APIs and verify both happy paths and error cases.
-
-- **Documentation**: Assisting with README structure and explaining architectural decisions clearly.
-
-The AI was particularly helpful in ensuring consistency across the codebase, catching edge cases in error handling, and suggesting improvements to the tool-calling loop implementation.
+This two-stage approach - planning in chat, building in an agentic IDE - 
+proved effective. The upfront planning meant the scaffold prompt was specific 
+enough that Cursor produced clean, well-structured code first time, minimising 
+the need for large corrections later.
