@@ -2,6 +2,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+from openai import RateLimitError
 
 from app.services import ai_service
 
@@ -264,3 +265,23 @@ async def test_get_ai_response_unknown_tool(mock_openai_client, mock_finnhub_cli
         )
 
     assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_get_ai_response_rate_limit_error(mock_openai_client, mock_finnhub_client):
+    """Test that RateLimitError is caught and yields a user-friendly message."""
+    # APIStatusError subclasses require message, response=, body= (keyword-only)
+    mock_openai_client.chat.completions.create.side_effect = RateLimitError(
+        "Rate limit exceeded", response=MagicMock(), body=None
+    )
+
+    result = await _collect_stream(
+        ai_service.get_ai_response(
+            "What is the price of AAPL?",
+            openai_client=mock_openai_client,
+            finnhub_client=mock_finnhub_client,
+        )
+    )
+
+    assert "rate limit" in result.lower()
+    assert "wait" in result.lower() or "moment" in result.lower()

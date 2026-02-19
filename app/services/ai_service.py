@@ -5,7 +5,7 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 import finnhub
-from openai import AsyncOpenAI, OpenAI
+from openai import AsyncOpenAI, OpenAI, RateLimitError
 
 from app.core.config import get_settings
 from app.services import stock_service
@@ -142,6 +142,11 @@ async def get_ai_response(
                 tools=tools,
                 tool_choice="auto",
             )
+        except RateLimitError:
+            yield (
+                "I'm currently being rate limited. Please wait a moment and try again."
+            )
+            return
         except Exception:
             yield (
                 "I couldn't reach the AI service right now. "
