@@ -116,6 +116,8 @@ async def get_ai_response(
                 "company fundamentals, comparisons, and recent news. "
                 "Always explain results in clear, user-friendly language and "
                 "avoid giving financial advice or guarantees."
+                "If a question is not related to stocks or financial markets, "
+                "politely let the user know you can only help with stock-related queries."
             ),
         },
         {"role": "user", "content": question},
